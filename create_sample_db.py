@@ -1,24 +1,33 @@
 import sqlite3
 import random
+from datetime import datetime, timedelta
 
 # Connect to SQLite database (or create it if it doesn't exist)
 conn = sqlite3.connect("real_estate.db")
 cursor = conn.cursor()
 
+# Drop tables if they already exist (forces recreation)
+cursor.execute("DROP TABLE IF EXISTS Conversation")
+cursor.execute("DROP TABLE IF EXISTS Property")
+cursor.execute("DROP TABLE IF EXISTS Contractor")
+cursor.execute("DROP TABLE IF EXISTS Role_map")
+
 # Create Property table
 cursor.execute('''
-CREATE TABLE IF NOT EXISTS Property (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE Property (
+    property_id INTEGER PRIMARY KEY AUTOINCREMENT,
     address TEXT NOT NULL,
     shortcode TEXT NOT NULL,
-    name TEXT NOT NULL
+    name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    status_detail TEXT NOT NULL
 )
 ''')
 
 # Create Contractor table
 cursor.execute('''
-CREATE TABLE IF NOT EXISTS Contractor (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE Contractor (
+    contractor_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     address TEXT NOT NULL,
     area TEXT NOT NULL,
@@ -26,79 +35,93 @@ CREATE TABLE IF NOT EXISTS Contractor (
 )
 ''')
 
-# Create Property_Contractor linking table
+# Create Conversation table
 cursor.execute('''
-CREATE TABLE IF NOT EXISTS Property_Contractor (
-    property_id INTEGER,
-    contractor_id INTEGER,
-    PRIMARY KEY (property_id, contractor_id),
-    FOREIGN KEY (property_id) REFERENCES Property(id),
-    FOREIGN KEY (contractor_id) REFERENCES Contractor(id)
+CREATE TABLE Conversation (
+    conversation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    property_id INTEGER NOT NULL,
+    contractor_id INTEGER NOT NULL,
+    chat TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    phone_number TEXT NOT NULL,
+    FOREIGN KEY (property_id) REFERENCES Property(property_id),
+    FOREIGN KEY (contractor_id) REFERENCES Contractor(contractor_id)
 )
 ''')
 
-# Populate Property table with 10 records
+# Create Role_map table
+cursor.execute('''
+CREATE TABLE Role_map (
+    phone_number TEXT PRIMARY KEY,
+    role TEXT NOT NULL,
+    property_id INTEGER NOT NULL
+)
+''')
+
+# Insert sample data for Property table
 properties = [
-    ("123 Main St", "P1", "Sunset Villas"),
-    ("456 Oak Ave", "P2", "Lakeview Homes"),
-    ("789 Pine Rd", "P3", "Hillside Residency"),
-    ("101 Maple St", "P4", "Urban Heights"),
-    ("202 Cedar Ln", "P5", "Greenwood Estates"),
-    ("303 Birch Blvd", "P6", "Summit Towers"),
-    ("404 Spruce Dr", "P7", "Riverside Condos"),
-    ("505 Aspen Ct", "P8", "Mountain View Lofts"),
-    ("606 Cherry Way", "P9", "Grand Oaks"),
-    ("707 Walnut Pl", "P10", "Golden Meadows")
+    ("123 Main St", "P001", "Sunset Villa", "Available", "Ready to move"),
+    ("456 Oak St", "P002", "Maple Residency", "Sold", "Under renovation"),
+    ("789 Pine St", "P003", "Pine Crest", "Available", "Newly constructed"),
+    ("321 Elm St", "P004", "Elm Heights", "Under Contract", "Pending approval"),
+    ("654 Cedar St", "P005", "Cedar Homes", "Available", "Furnished"),
 ]
-cursor.executemany("INSERT INTO Property (address, shortcode, name) VALUES (?, ?, ?)", properties)
 
-# Populate Contractor table with 10 records
+cursor.executemany('''
+INSERT INTO Property (address, shortcode, name, status, status_detail)
+VALUES (?, ?, ?, ?, ?)''', properties)
+
+# Insert sample data for Contractor table
 contractors = [
-    ("John Doe", "123 Contract Ln", "Metro Area", "555-1234"),
-    ("Jane Smith", "456 Builder Rd", "Uptown", "555-5678"),
-    ("Mike Johnson", "789 Developer Ave", "Downtown", "555-9101"),
-    ("Emily Davis", "101 Renovation St", "Suburban", "555-1122"),
-    ("Chris Wilson", "202 Construction Blvd", "Industrial", "555-3344"),
-    ("Laura Brown", "303 Repair Dr", "Coastal", "555-5566"),
-    ("Tom Harris", "404 Remodel Ln", "Mountain", "555-7788"),
-    ("Emma White", "505 Rebuild Ct", "Rural", "555-9900"),
-    ("David Green", "606 Framework Pl", "City Center", "555-2233"),
-    ("Sophia Black", "707 Masonry Way", "Historic District", "555-4455")
+    ("John Doe", "789 Contractor Ave", "Downtown", "1234567890"),
+    ("Jane Smith", "456 Builder Rd", "Uptown", "9876543210"),
+    ("Mike Johnson", "321 Fixer St", "Suburb", "5678901234"),
+    ("Sarah Lee", "654 Renovate Blvd", "Midtown", "4321098765"),
+    ("David Kim", "147 Construct Ln", "Old Town", "6789012345"),
 ]
-cursor.executemany("INSERT INTO Contractor (name, address, area, phone_number) VALUES (?, ?, ?, ?)", contractors)
 
-# Link properties with contractors randomly
-property_ids = [i+1 for i in range(10)]
-contractor_ids = [i+1 for i in range(10)]
-links = [(random.choice(property_ids), random.choice(contractor_ids)) for _ in range(10)]
-cursor.executemany("INSERT INTO Property_Contractor (property_id, contractor_id) VALUES (?, ?)", links)
+cursor.executemany('''
+INSERT INTO Contractor (name, address, area, phone_number)
+VALUES (?, ?, ?, ?)''', contractors)
 
-# Commit changes and close connection
+# Insert sample data for Conversation table
+conversations = []
+for i in range(1, 11):
+    property_id = random.randint(1, 5)
+    contractor_id = random.randint(1, 5)
+    chat = f"Discussion about property {property_id} with contractor {contractor_id}."
+    timestamp = (datetime.now() - timedelta(days=random.randint(1, 30))).strftime("%Y-%m-%d %H:%M:%S")
+    phone_number = random.choice(["1234567890", "9876543210", "5678901234", "4321098765", "6789012345"])
+    conversations.append((property_id, contractor_id, chat, timestamp, phone_number))
+
+cursor.executemany('''
+INSERT INTO Conversation (property_id, contractor_id, chat, timestamp, phone_number)
+VALUES (?, ?, ?, ?, ?)''', conversations)
+
+# Insert sample data for Role_map table
+roles = [
+    ("1234567890", "Admin", 1),
+    ("9876543210", "User", 2),
+    ("5678901234", "Manager", 3),
+    ("4321098765", "User", 4),
+    ("6789012345", "Admin", 5),
+]
+
+cursor.executemany('''
+INSERT INTO Role_map (phone_number, role, property_id)
+VALUES (?, ?, ?)''', roles)
+
+# Commit and verify if tables were created
 conn.commit()
 
-# Function to fetch all properties
-def get_properties():
-    print("Fetching all properties...")
-    cursor.execute("SELECT * FROM Property")
-    return cursor.fetchall()
+# Print table verification
+print("\nTables in the database:")
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+tables = cursor.fetchall()
+for table in tables:
+    print(table[0])
 
-# Function to fetch all contractors
-def get_contractors():
-    cursor.execute("SELECT * FROM Contractor")
-    return cursor.fetchall()
-
-# Function to link a property with a contractor
-def link_property_contractor(property_id, contractor_id):
-    cursor.execute('''
-    INSERT INTO Property_Contractor (property_id, contractor_id)
-    VALUES (?, ?)
-    ''', (property_id, contractor_id))
-    conn.commit()
-
-# Example Usage
-print("Properties:", get_properties())
-print("Contractors:", get_contractors())
-
+# Close the connection
 conn.close()
 
-print("SQLite tables populated and accessed successfully.")
+print("\nDatabase populated successfully!")
