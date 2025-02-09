@@ -2,6 +2,7 @@ import sqlite3
 from langchain.llms import Ollama
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferMemory
+from langchain_community.agent_toolkits import create_sql_agent
 
 # Database Connection
 DB_PATH = "real_estate.db"  # Update with your actual database file
@@ -57,6 +58,7 @@ def get_context(phone_number):
 
 # Initialize Ollama (Ensure Ollama is running)
 llm = Ollama(model="llama3")
+agent_executor = create_sql_agent(llm, db=db, agent_type="openai-tools", verbose=True)
 
 print("\n🤖 Welcome to the LLaMA 3 Chatbot! Type 'exit' to quit.\n")
 
