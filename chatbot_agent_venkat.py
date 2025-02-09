@@ -13,7 +13,6 @@ llm = ChatOllama(model="llama3:70b")
 # Utility functions
 def update_property_status(input_str: str):
     try:
-        print(f"🔍 Raw Input: {input_str}")  # Debug log
         input_str = input_str.strip().replace("'", "")  # Remove any quotes
         property_id, status = map(str.strip, input_str.split(","))
         property_id = int(property_id)
@@ -37,6 +36,32 @@ def query_database(query: str):
     except Exception as e:
         return f"Error querying database: {e}"
 
+# Load property details based on phone number
+def load_property_details(phone_number: str):
+    try:
+        with sqlite3.connect("real_estate.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.property_id, p.address, p.shortcode, p.name, p.status, p.status_detail
+                FROM Property p
+                JOIN Role_map r ON p.property_id = r.property_id
+                WHERE r.phone_number = ?
+            """, (phone_number,))
+            property_details = cursor.fetchone()
+
+            if property_details:
+                return {
+                    "property_id": property_details[0],
+                    "address": property_details[1],
+                    "shortcode": property_details[2],
+                    "name": property_details[3],
+                    "status": property_details[4],
+                    "status_detail": property_details[5]
+                }
+            return None
+    except Exception as e:
+        return f"Error loading property details: {e}"
+
 # Tools
 tools = [
     Tool(name="UpdatePropertyStatus", func=update_property_status, description="Updates the status of a property. Input: 'property_id,status' (e.g., '1,Sold')."),
@@ -46,6 +71,9 @@ tools = [
 # Prompt Template
 template = """
 You are an AI assistant interacting with a SQL database.
+
+### PROPERTY DETAILS:
+{property_details}
 
 ### 🚨 STRICT RESPONSE FORMAT:
 1. **Tool Call:** 
@@ -79,14 +107,13 @@ Decide to use a tool ONLY if it's required based on the user's query. If no tool
 
 prompt = PromptTemplate(
     template=template,
-    input_variables=["input", "db_tables", "agent_scratchpad", "tool_names", "tools"]
+    input_variables=["input", "db_tables", "agent_scratchpad", "tool_names", "tools", "property_details"]
 )
 
 # Custom Output Parser
 class CustomOutputParser(AgentOutputParser):
     def parse(self, llm_output: str):
         llm_output = llm_output.strip()
-        print("\n🔍 RAW LLM OUTPUT:\n", llm_output, "\n")
 
         if "Final Answer:" in llm_output:
             if "Error" in llm_output:
@@ -120,6 +147,15 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_pa
 
 # Interactive Chat Loop
 def interactive_chat():
+    phone_number = input("📞 Enter your phone number: ")
+    property_details = load_property_details(phone_number)
+
+    print('Got property details: ', property_details)
+
+    if not property_details:
+        print("❌ No property found associated with this phone number.")
+        return
+
     conversation_history = ""
     print("💬 Real Estate Agent Bot (type 'exit' to quit)\n")
 
@@ -134,7 +170,8 @@ def interactive_chat():
             "db_tables": db.get_usable_table_names(),
             "agent_scratchpad": conversation_history,
             "tool_names": ", ".join(t.name for t in tools),
-            "tools": "\n".join(t.description for t in tools)
+            "tools": "\n".join(t.description for t in tools),
+            "property_details": property_details
         })
 
         print("AI:", response.get('output'))

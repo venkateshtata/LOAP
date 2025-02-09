@@ -1,10 +1,8 @@
 import sqlite3
-from langchain.llms import Ollama
-from langchain.memory import ConversationBufferMemory
-from langchain.agents import initialize_agent, Tool
-from langchain.tools import tool
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+import re
+from langchain_ollama import OllamaLLM
+from langgraph.graph import StateGraph
+from typing import Dict, Any, Optional
 
 # Database Connection
 DB_PATH = "real_estate.db"  # Ensure this is the correct path
@@ -28,118 +26,94 @@ def execute_query(query, params=(), fetch=False):
         print("[ERROR] Database operation failed:", e)
         return f"Database error: {e}"
 
-def get_context(phone_number):
-    """Fetches chat history, role, and property details for a given phone number."""
-    print(f"[DEBUG] Fetching context for phone number: {phone_number}")
+def get_properties(phone_number: str):
+    """Fetches all properties linked to the given phone number."""
+    print(f"[DEBUG] Fetching properties for phone number: {phone_number}")
     
-    role_data = execute_query(
+    properties = execute_query(
         """
-        SELECT role, property_id FROM Role_map WHERE phone_number = ?
+        SELECT p.property_id, p.name, p.address FROM Property p
+        JOIN Role_map r ON p.property_id = r.property_id
+        WHERE r.phone_number = ?
         """, 
         (phone_number,), fetch=True
     )
     
-    if not role_data:
-        print("[DEBUG] No role data found.")
+    if not properties:
+        print("[DEBUG] No properties found.")
         return None
     
-    role, property_id = role_data[0]
-    
-    property_data = execute_query(
-        """
-        SELECT address, status, status_detail FROM Property WHERE property_id = ?
-        """, 
-        (property_id,), fetch=True
-    )
-    
-    if not property_data:
-        print("[DEBUG] No property data found.")
-        return None
-    
-    property_address, property_status, property_status_details = property_data[0]
-    
-    chat_history = execute_query(
-        """
-        SELECT chat FROM Conversation WHERE phone_number = ?
-        """, 
-        (phone_number,), fetch=True
-    )
-    
-    chat_history_text = "\n".join(row[0] for row in chat_history) if chat_history else "No prior conversation."
-    
-    context = f"""
-    Role: {role}
-    Property Address: {property_address}
-    Property Status: {property_status}
-    Property Status Details: {property_status_details}
-    Previous Chat History:
-    {chat_history_text}
-    """
-    
-    return context
+    return properties
 
-@tool("update_property_status", return_direct=True)
-def update_property_status(property_id: str, new_status: str, new_status_detail: str):
-    """Updates the status and status details of a property."""
-    print(f"[DEBUG] Updating property {property_id} to status '{new_status}', details '{new_status_detail}'")
+def update_property(property_id: str, field: str, new_value: str):
+    """Updates a specific field of a property."""
+    print(f"[DEBUG] Updating property {property_id} field '{field}' to '{new_value}'")
     
-    result = execute_query(
-        """
-        UPDATE Property SET status = ?, status_detail = ? WHERE property_id = ?
-        """, 
-        (new_status, new_status_detail, property_id)
-    )
+    query = f"UPDATE Property SET {field} = ? WHERE property_id = ?"
+    result = execute_query(query, (new_value, property_id))
     
     if result == "Success":
-        return f"Property {property_id} updated successfully."
+        return f"✅ Property {property_id} updated successfully."
     else:
         return result
 
-@tool("update_role", return_direct=True)
-def update_role(phone_number: str, new_role: str):
-    """Updates the role of a user based on phone number."""
-    print(f"[DEBUG] Updating role for {phone_number} to '{new_role}'")
+def detect_update_request(user_input: str, default_property_id: Optional[str]) -> Optional[tuple]:
+    """Parses user input to detect if it contains a property update request."""
+    pattern = re.search(r"update (\w+) of property (\d+) to (.+)", user_input, re.IGNORECASE)
     
-    result = execute_query(
-        """
-        UPDATE Role_map SET role = ? WHERE phone_number = ?
-        """, 
-        (new_role, phone_number)
-    )
+    if pattern:
+        field, property_id, new_value = pattern.groups()
+        return property_id, field, new_value
     
-    if result == "Success":
-        return f"Role for {phone_number} updated successfully."
+    # If no property ID is explicitly mentioned, assume it's for the first linked property
+    if "update" in user_input.lower() and default_property_id:
+        pattern = re.search(r"update the (\w+) to (.+)", user_input, re.IGNORECASE)
+        if pattern:
+            field, new_value = pattern.groups()
+            return default_property_id, field, new_value
+    
+    return None
+
+def chatbot_logic(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Processes user input and updates the conversation state."""
+    user_input = state.get("user_input", "")
+    
+    if state.get("awaiting_phone_number", True):
+        state["phone_number"] = user_input
+        properties = get_properties(user_input)
+        if properties:
+            state["linked_properties"] = properties  # Store property list in state
+            state["default_property_id"] = properties[0][0]  # Assume first property is default
+            greeting_message = "\nHello! Here are your linked properties:\n"
+            for prop in properties:
+                greeting_message += f"- {prop[1]} at {prop[2]}\n"
+            state["response"] = greeting_message
+        else:
+            state["response"] = "No properties found for this phone number."
+        state["awaiting_phone_number"] = False
     else:
-        return result
+        update_info = detect_update_request(user_input, state.get("default_property_id"))
+        if update_info:
+            property_id, field, new_value = update_info
+            update_result = update_property(property_id, field, new_value)
+            state["response"] = update_result
+        else:
+            state["response"] = "I didn't understand that. You can update a property by saying 'Update the status to Sold'."
+    return state
 
-# Initialize LLM and agent
-llm = Ollama(model="llama3")
+# Create and compile LangGraph state machine
+workflow = StateGraph(state_schema=Dict[str, Any])
+workflow.add_node("chatbot_logic", chatbot_logic)
+workflow.set_entry_point("chatbot_logic")
+compiled_workflow = workflow.compile()
 
-# Define tools
-tools = [update_property_status, update_role]
-
-agent_executor = initialize_agent(
-    tools=tools,
-    llm=llm,
-    agent="zero-shot-react-description",
-    verbose=True
-)
-
-print("\n🤖 Welcome to the Agent-based LLaMA 3 Chatbot! Type 'exit' to quit.\n")
-
-while True:
-    phone_number = input("Enter your phone number: ").strip()
+# Start chatbot
+def chatbot():
+    print("\n🤖 Welcome to the Real Estate Chatbot! Type 'exit' to quit.\n")
+    state = {"awaiting_phone_number": True, "user_input": ""}
     
-    context = get_context(phone_number)
-    
-    if not context:
-        print("❌ No data found for this phone number.")
-        continue
-    
-    print("[DEBUG] Context retrieved:\n", context)
-    
-    memory = ConversationBufferMemory()
-    memory.save_context({"input": "System Context"}, {"output": context})
+    # Prompt user for phone number first
+    print("Bot: Please enter your phone number to retrieve linked properties:")
     
     while True:
         user_input = input("You: ")
@@ -148,8 +122,10 @@ while True:
             print("Goodbye! 👋")
             break
         
-        try:
-            response = agent_executor.run(user_input)
-            print("Bot:", response)
-        except Exception as e:
-            print("[ERROR] Agent execution failed:", e)
+        state["user_input"] = user_input  # Store user input in state
+        state = compiled_workflow.invoke(state)  # Pass state, not user_input separately
+        print("Bot:", state["response"])
+
+# Run chatbot
+if __name__ == "__main__":
+    chatbot()
