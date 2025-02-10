@@ -45,6 +45,23 @@ def get_properties(phone_number: str):
     
     return properties
 
+def get_meeting_link(property_id: str):
+    """Fetches the meeting link for the agent assigned to the property."""
+    print(f"[DEBUG] Looking up meeting link for property {property_id}")
+    
+    result = execute_query(
+        """
+        SELECT fly_person_name, meeting_link FROM "Flyp_contact"
+        WHERE property_id = ?
+        """, (property_id,), fetch=True
+    )
+    
+    if result:
+        agent_name, meeting_link = result[0]
+        return f"Your assigned agent is {agent_name}. You can schedule a meeting here: {meeting_link}"
+    else:
+        return "No agent found for this property. Please contact support."
+
 def update_property(property_id: str, field: str, new_value: str):
     """Updates a specific field of a property."""
     print(f"[DEBUG] Updating property {property_id} field '{field}' to '{new_value}'")
@@ -57,20 +74,24 @@ def update_property(property_id: str, field: str, new_value: str):
     else:
         return result
 
-def detect_update_request(user_input: str, default_property_id: Optional[str]) -> Optional[tuple]:
-    """Parses user input to detect if it contains a property update request."""
-    pattern = re.search(r"update (\w+) of property (\d+) to (.+)", user_input, re.IGNORECASE)
+def detect_request(user_input: str, default_property_id: Optional[str]) -> Optional[tuple]:
+    """Parses user input to detect update or meeting requests."""
     
+    # Detect property update requests
+    pattern = re.search(r"update (\w+) of property (\d+) to (.+)", user_input, re.IGNORECASE)
     if pattern:
         field, property_id, new_value = pattern.groups()
-        return property_id, field, new_value
+        return ("update", property_id, field, new_value)
     
-    # If no property ID is explicitly mentioned, assume it's for the first linked property
     if "update" in user_input.lower() and default_property_id:
         pattern = re.search(r"update the (\w+) to (.+)", user_input, re.IGNORECASE)
         if pattern:
             field, new_value = pattern.groups()
-            return default_property_id, field, new_value
+            return ("update", default_property_id, field, new_value)
+    
+    # Detect meeting request
+    if "meeting" in user_input.lower() or "schedule" in user_input.lower():
+        return ("meeting", default_property_id)
     
     return None
 
@@ -92,13 +113,19 @@ def chatbot_logic(state: Dict[str, Any]) -> Dict[str, Any]:
             state["response"] = "No properties found for this phone number."
         state["awaiting_phone_number"] = False
     else:
-        update_info = detect_update_request(user_input, state.get("default_property_id"))
-        if update_info:
-            property_id, field, new_value = update_info
-            update_result = update_property(property_id, field, new_value)
-            state["response"] = update_result
+        request_info = detect_request(user_input, state.get("default_property_id"))
+        if request_info:
+            request_type = request_info[0]
+            if request_type == "update":
+                _, property_id, field, new_value = request_info
+                update_result = update_property(property_id, field, new_value)
+                state["response"] = update_result
+            elif request_type == "meeting":
+                _, property_id = request_info
+                meeting_response = get_meeting_link(property_id)
+                state["response"] = meeting_response
         else:
-            state["response"] = "I didn't understand that. You can update a property by saying 'Update the status to Sold'."
+            state["response"] = "I didn't understand that. You can update a property by saying 'Update the status to Sold' or request a meeting."
     return state
 
 # Create and compile LangGraph state machine
@@ -112,7 +139,6 @@ def chatbot():
     print("\n🤖 Welcome to the Real Estate Chatbot! Type 'exit' to quit.\n")
     state = {"awaiting_phone_number": True, "user_input": ""}
     
-    # Prompt user for phone number first
     print("Bot: Please enter your phone number to retrieve linked properties:")
     
     while True:
