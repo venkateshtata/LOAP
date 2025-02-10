@@ -1,0 +1,32 @@
+2025-02-10 18:49:24,036 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 18:49:26,615 - INFO - Model selected tool: execute_sql_query with arguments: {'db_path': '', 'query': "SELECT * FROM sqlite_master WHERE type='table';"}
+2025-02-10 18:49:26,620 - INFO - Model response: No results found.
+2025-02-10 18:57:05,597 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 18:57:06,942 - INFO - Model selected tool: get_contractor_data with arguments: {'db_path': ''}
+2025-02-10 18:57:06,947 - INFO - Model response: Error: no such table: Contractor
+2025-02-10 19:09:42,035 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 19:15:27,707 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 19:15:28,861 - INFO - Model selected tool: get_contractor_data with arguments: {}
+2025-02-10 19:15:28,866 - INFO - Model response: (1, 'John Doe', '789 Contractor Ave', 'Downtown', '1234567890')
+(2, 'Jane Smith', '456 Builder Rd', 'Uptown', '9876543210')
+(3, 'Mike Johnson', '321 Fixer St', 'Suburb', '5678901234')
+(4, 'Sarah Lee', '654 Renovate Blvd', 'Midtown', '4321098765')
+(5, 'David Kim', '147 Construct Ln', 'Old Town', '6789012345')
+2025-02-10 19:33:50,922 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 19:33:51,997 - INFO - Model selected tool: converse with arguments: {'input': 'hi'}
+2025-02-10 19:33:52,146 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 19:33:53,674 - INFO - Model response: Hi! It's nice to meet you. Is there something I can help you with or would you like to chat?
+2025-02-10 19:54:17,739 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 19:54:18,627 - INFO - Model selected tool: get_property_data with arguments: {}
+2025-02-10 19:54:18,631 - INFO - Model response: (1, '123 Main St', 'P001', 'Sunset Villa', 'LOOPLOOP', 'Ready to move')
+(2, '456 Oak St', 'P002', 'Maple Residency', 'Sold', 'Under renovation')
+(3, '789 Pine St', 'P003', 'Pine Crest', 'Available', 'Newly constructed')
+(4, '321 Elm St', 'P004', 'Elm Heights', 'Under Contract', 'Pending approval')
+(5, '654 Cedar St', 'P005', 'Cedar Homes', 'Available', 'Furnished')
+2025-02-10 19:54:44,226 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-10 19:54:45,288 - INFO - Model selected tool: get_property_data with arguments: {}
+2025-02-10 19:54:45,292 - INFO - Model response: (1, '123 Main St', 'P001', 'Sunset Villa', 'LOOPLOOP', 'Ready to move')
+(2, '456 Oak St', 'P002', 'Maple Residency', 'Sold', 'Under renovation')
+(3, '789 Pine St', 'P003', 'Pine Crest', 'Available', 'Newly constructed')
+(4, '321 Elm St', 'P004', 'Elm Heights', 'Under Contract', 'Pending approval')
+(5, '654 Cedar St', 'P005', 'Cedar Homes', 'Available', 'Furnished')
