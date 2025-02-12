@@ -448,3 +448,7 @@ Details: Ready to move
 2025-02-12 12:25:48,098 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
 2025-02-12 12:25:53,353 - INFO - Model selected tool: get_meeting_link with arguments: {'fly_person_name': 'Bob Smith'}
 2025-02-12 12:25:53,356 - INFO - Model response: Meeting link for Bob Smith: https://calendly.com/bob-smith
+2025-02-12 12:55:40,775 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-12 12:55:51,786 - INFO - Model selected tool: converse with arguments: {'input': '[Phone: 1234567890] what is my phone number ?'}
+2025-02-12 12:55:51,906 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-02-12 12:55:52,836 - INFO - Model response: Your phone number is: **123-456-7890**

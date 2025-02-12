@@ -15,6 +15,14 @@ logging.basicConfig(filename='chatbot_logs.log', level=logging.INFO, format='%(a
 
 model = ChatOllama(model="llama3.3:70b")
 
+# Modal to get phone number
+if 'phone_number' not in st.session_state:
+    with st.form(key='phone_form'):
+        phone_number = st.text_input("Enter your phone number:", max_chars=15)
+        submit_button = st.form_submit_button(label='Submit')
+        if submit_button and phone_number:
+            st.session_state.phone_number = phone_number
+
 
 @tool
 def converse(input: str) -> str:
@@ -191,12 +199,16 @@ for msg in msgs.messages:
 
 # React to user input
 if input := st.chat_input("What is up?"):
+    # Append phone number to the message
+    phone_number = st.session_state.get('phone_number', 'Unknown')
+    input_with_phone = f"[Phone: {phone_number}] {input}"
+
     # Display user input and save to message history.
-    st.chat_message("user").write(input)
-    msgs.add_user_message(input)
+    st.chat_message("user").write(input_with_phone)
+    msgs.add_user_message(input_with_phone)
 
     # Invoke chain to get response.
-    response = chain.invoke({'input': input})
+    response = chain.invoke({'input': input_with_phone})
 
     # Extract the content from AIMessage object
     content = response.content if hasattr(response, 'content') else str(response)
