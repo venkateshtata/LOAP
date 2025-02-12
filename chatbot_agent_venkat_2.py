@@ -13,18 +13,8 @@ from langchain_ollama import ChatOllama
 # Configure logging
 logging.basicConfig(filename='chatbot_logs.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-model = ChatOllama(model="llama3:70b")
+model = ChatOllama(model="llama3.3:70b")
 
-
-@tool
-def add(first: int, second: int) -> int:
-    "Add two integers."
-    return first + second
-
-@tool
-def multiply(first: int, second: int) -> int:
-    """Multiply two integers together."""
-    return first * second
 
 @tool
 def converse(input: str) -> str:
@@ -32,65 +22,127 @@ def converse(input: str) -> str:
     return model.invoke(input)
 
 @tool
-def update_property_status(property_id: int, new_status: str, status_detail: str) -> str:
-    """Update the status of a property in the Property table.
+def update_property_status(property_identifier: str, new_status: str, status_detail: str = "") -> str:
+    """Update the status and status_detail of a property in the real estate database.
+    This tool should be used when you need to change a property's status, such as marking it as 'Sold', 
+    'Available', 'Under Contract', 'Pending', etc. The status change helps track the current state of properties
+    in the real estate inventory. You can identify the property using its ID, address, shortcode, or name.
+
     Args:
-        property_id (int): The ID of the property to update.
-        new_status (str): The new status to set.
-        status_detail (str): Additional details about the status.
+        property_identifier (str): The property identifier - can be property_id, address, shortcode or name
+        new_status (str): The new status to set for the property (e.g. 'Sold', 'Available', 'Under Contract')
+        status_detail (str, optional): Additional details about the status change. Defaults to empty string.
+
     Returns:
-        str: Confirmation message of the update.
+        str: A message confirming the status update was successful, or an error message if it failed
     """
     try:
         conn = sqlite3.connect('real_estate.db')
         cursor = conn.cursor()
+        
+        # First try to find the property using the provided identifier
+        cursor.execute("""
+            SELECT property_id FROM Property 
+            WHERE property_id = ? OR address = ? OR shortcode = ? OR name = ?
+        """, (property_identifier, property_identifier, property_identifier, property_identifier))
+        
+        result = cursor.fetchone()
+        if not result:
+            return f"Error: No property found matching identifier '{property_identifier}'"
+            
+        property_id = result[0]
+        
+        # Update both status and status_detail
         cursor.execute("""
             UPDATE Property 
-            SET status = ?, status_detail = ? 
+            SET status = ?, status_detail = ?
             WHERE property_id = ?
         """, (new_status, status_detail, property_id))
+        
         conn.commit()
         conn.close()
-        return "Property status updated successfully."
+        
+        update_msg = f"Property {property_identifier} status successfully updated to '{new_status}'"
+        if status_detail:
+            update_msg += f" with details: '{status_detail}'"
+        return update_msg
+        
     except Exception as e:
         return f"Error: {str(e)}"
 
+
 @tool
-def get_contractor_data() -> str:
-    """Retrieve data about contractors from the Contractor table.
-    Args: None
+def get_property_status(property_identifier: str) -> str:
+    """Retrieve status and status details for a specific property.
+    Args:
+        property_identifier: The property's address, shortcode, or name to look up
     Returns:
-        str: The contractor data as a string.
+        str: The property's status information as a string
     """
     try:
         conn = sqlite3.connect('real_estate.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Contractor")
-        results = cursor.fetchall()
+        
+        # Try to find the property using the provided identifier
+        cursor.execute("""
+            SELECT status, status_detail 
+            FROM Property 
+            WHERE address = ? OR shortcode = ? OR name = ?
+        """, (property_identifier, property_identifier, property_identifier))
+        
+        result = cursor.fetchone()
         conn.close()
-        return "\n".join([str(row) for row in results]) if results else "No contractor data found."
+        
+        if not result:
+            return f"No property found matching identifier '{property_identifier}'"
+            
+        status, status_detail = result
+        response = f"Property '{property_identifier}' status: {status}"
+        if status_detail:
+            response += f"\nDetails: {status_detail}"
+        return response
+        
     except Exception as e:
         return f"Error: {str(e)}"
 
+
 @tool
-def get_property_data() -> str:
-    """Retrieve data about properties from the Property table.
-    Args: None
+def get_meeting_link(fly_person_name: str) -> str:
+    """Retrieve a meeting link for scheduling a meeting with a specific fly person.
+    This tool helps coordinate meetings by providing the appropriate video conferencing link
+    for the specified fly team member.
+    
+    Args:
+        fly_person_name: The name of the fly team member you want to meet with
+        
     Returns:
-        str: The property data as a string.
+        str: The meeting link for the specified person, or an error message if the person is not found
     """
     try:
         conn = sqlite3.connect('real_estate.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Property")
-        results = cursor.fetchall()
+        
+        cursor.execute("""
+            SELECT meeting_link
+            FROM Flyp_contact 
+            WHERE fly_person_name = ?
+        """, (fly_person_name,))
+        
+        result = cursor.fetchone()
         conn.close()
-        return "\n".join([str(row) for row in results]) if results else "No property data found."
+        
+        if not result:
+            return f"No meeting link found for fly team member '{fly_person_name}'"
+            
+        meeting_link = result[0]
+        return f"Meeting link for {fly_person_name}: {meeting_link}"
+        
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error retrieving meeting link: {str(e)}"
+
 
 # List of tools
-tools = [add, multiply, converse, update_property_status, get_contractor_data, get_property_data]
+tools = [converse, update_property_status, get_property_status, get_meeting_link]
 rendered_tools = render_text_description(tools)
 
 parser = JsonOutputParser()
@@ -123,15 +175,15 @@ def tool_chain(model_output):
 
     return itemgetter("arguments") | chosen_tool
 
-chain = prompt | model | JsonOutputParser() | tool_chain
+chain = prompt | model | JsonOutputParser() | tool_chain 
 
 # Set up message history.
 msgs = StreamlitChatMessageHistory(key="langchain_messages")
 if len(msgs.messages) == 0:
-    msgs.add_ai_message("I can add, multiply, chat, execute SQL queries, update property status, or retrieve contractor and property data! How can I help you?")
+    msgs.add_ai_message("I can retreive and update your property statuses")
 
 # Set the page title.
-st.title("Chatbot with Tools")
+st.title("Flyp AI")
 
 # Render the chat history.
 for msg in msgs.messages:
